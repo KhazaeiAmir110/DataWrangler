@@ -1,0 +1,11 @@
+phone_model_id,phone_sub_model_id,phone_model_nickname_slug,phone_submodel_internal_memory,phone_submodel_ram,post_price,actual_price,fake_or_original
+1,101,iphone-12,64,4,700,750,original
+1,102,iphone-12,128,4,750,800,original
+2,201,galaxy-s21,128,8,900,950,original
+2,202,galaxy-s21,256,8,1000,1050,original
+3,301,pixel-5,128,8,600,650,original
+3,302,pixel-5,256,8,700,750,original
+4,401,oneplus-9,128,8,800,850,fake
+4,402,oneplus-9,256,12,900,950,original
+5,501,mi-11,128,8,500,550,original
+5,502,mi-11,256,8,600,650,original
