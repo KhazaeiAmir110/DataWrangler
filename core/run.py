@@ -1,6 +1,6 @@
 import logging
 
-from core.test import PhonePricePredictor
+from core.services.predictor import PhonePricePredictor
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -13,8 +13,6 @@ if __name__ == "__main__":
     result_csv_path = "../output_files/output_phone.csv"
 
     predictor = PhonePricePredictor(market_posts_path, result_csv_path)
-    is_valid, mean_error, std_error, process_time = predictor.run()
-    if is_valid:
-        print(f"Process completed successfully in {process_time} seconds.")
-    else:
-        print("Process failed.")
+    process_time = predictor.run()
+
+    print(f"Process completed successfully in {process_time} seconds.")
