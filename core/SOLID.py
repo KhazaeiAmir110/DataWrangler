@@ -1,39 +1,81 @@
 import logging
 from datetime import datetime
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Any
 
 import pandas as pd
+from pandas import DataFrame
+
+from core.services.errors import CustomError
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 class PhonePricePredictor:
-    def __init__(self, source_csv_path: str, result_csv_path: str):
-        self.source_csv_path = source_csv_path
+    def __init__(self, market_posts_path, phone_main_path, phone_models_path, reference_path, result_csv_path):
+        self.market_posts_path = market_posts_path
+        self.phone_main_path = phone_main_path
+        self.phone_models_path = phone_models_path
+        self.reference_path = reference_path
+
         self.result_csv_path = result_csv_path
+
         self.data = None
         self.cleaned_data = None
         self.final_data = None
 
-    def load_data(self) -> Optional[pd.DataFrame]:
+    def load_data(self) -> tuple[DataFrame | Any, DataFrame | Any, DataFrame | Any, DataFrame | Any]:
         try:
-            # self.data = pd.read_csv(self.source_csv_path)
+            self.market_posts_path = pd.read_csv(self.market_posts_path)
+            self.phone_main_path = pd.read_csv(self.phone_main_path)
+            self.phone_models_path = pd.read_csv(self.phone_models_path)
+            self.reference_path = pd.read_csv(self.reference_path)
             logging.info("Data loaded successfully.")
-            return self.data
+            return self.market_posts_path, self.phone_main_path, self.phone_models_path, self.reference_path
         except Exception as e:
             logging.error(f"Error loading data: {e}")
             raise CustomError("Failed to load data.")
 
     def clean_data(self) -> Optional[pd.DataFrame]:
-        """پاکسازی داده‌ها"""
-        if self.data is None:
+        if self.market_posts_path is None:
             raise CustomError("No data to clean.")
 
         try:
-            # مثال: حذف ردیف‌های با مقادیر خالی
-            self.cleaned_data = self.data.dropna()
-            # مثال: تبدیل ستون‌ها به نوع داده مناسب
-            self.cleaned_data['post_price'] = self.cleaned_data['post_price'].astype(float)
+            self.market_posts_path = self.market_posts_path[
+                (self.market_posts_path['is_original'] is True) &
+                (self.market_posts_path['direct_sale'] is True) &
+                self.market_posts_path['phone_id'].notna() &
+                self.market_posts_path['phone_model_id'].notna()
+                ]
+
+            self.reference_path = self.reference_path[self.reference_path['is important ?'] != 'ignore']
+
+            self.reference_path['lower bound'] = self.reference_path['lower bound'].str.replace(',', '').astype(float)
+            self.reference_path['upper bound'] = self.reference_path['upper bound'].str.replace(',', '').astype(float)
+
+            self.reference_path['mean_real'] = (self.reference_path['lower bound'] + self.reference_path[
+                'upper bound']) / 2
+
+            self.reference_path = self.reference_path.merge(self.phone_main_path, how='inner', on='nickname')
+            self.reference_path = self.reference_path.merge(self.phone_models_path, how='inner',
+                                                            on=['phone_id', 'internal_memory', 'ram'])
+
+            self.reference_path = self.reference_path.rename(columns={'id': 'phone_model_id'})
+            self.reference_path = self.reference_path[
+                ['phone_model_id', 'nickname', 'ram', 'internal_memory', 'phone_id', 'mean_real']]
+
+            self.reference_path['phone_id'] = self.reference_path['phone_id'].astype(float)
+            self.reference_path['phone_model_id'] = self.reference_path['phone_model_id'].astype(float)
+
+            # Debuged by alireza and amirhossein
+            self.cleaned_data = self.market_posts_path.merge(self.reference_path, how='inner',
+                                                          on=['phone_id', 'phone_model_id'])
+
+            self.cleaned_data = self.cleaned_data[
+                ['nickname', 'ram_y', 'internal_memory_y', 'phone_id', 'phone_model_id', 'price', 'approval_status',
+                 'sub_phone_id', 'description', 'mean_real']]
+            self.cleaned_data = self.cleaned_data.rename(
+                columns={'internal_memory_y': 'internal_memory', 'ram_y': 'ram'})
+
             logging.info("Data cleaned successfully.")
             return self.cleaned_data
         except Exception as e:
@@ -125,18 +167,3 @@ class PhonePricePredictor:
         except CustomError as e:
             logging.error(f"Process failed: {e}")
             return False, 0, 0, 0
-
-
-class CustomError(Exception):
-    pass
-
-
-if __name__ == "__main__":
-    source_csv_path = "source.csv"
-    result_csv_path = "result.csv"
-    predictor = PhonePricePredictor(source_csv_path, result_csv_path)
-    is_valid, mean_error, std_error, process_time = predictor.run()
-    if is_valid:
-        print(f"Process completed successfully in {process_time} seconds.")
-    else:
-        print("Process failed.")
