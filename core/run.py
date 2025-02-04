@@ -1,6 +1,6 @@
 import logging
 
-from core.SOLID import PhonePricePredictor
+from core.services.predictor import PhonePricePredictor
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
