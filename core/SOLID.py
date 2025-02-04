@@ -41,8 +41,8 @@ class PhonePricePredictor:
 
         try:
             self.market_posts_path = self.market_posts_path[
-                (self.market_posts_path['is_original'] is True) &
-                (self.market_posts_path['direct_sale'] is True) &
+                (self.market_posts_path['is_original'] == True) &
+                (self.market_posts_path['direct_sale'] == True) &
                 self.market_posts_path['phone_id'].notna() &
                 self.market_posts_path['phone_model_id'].notna()
                 ]
@@ -68,7 +68,7 @@ class PhonePricePredictor:
 
             # Debuged by alireza and amirhossein
             self.cleaned_data = self.market_posts_path.merge(self.reference_path, how='inner',
-                                                          on=['phone_id', 'phone_model_id'])
+                                                             on=['phone_id', 'phone_model_id'])
 
             self.cleaned_data = self.cleaned_data[
                 ['nickname', 'ram_y', 'internal_memory_y', 'phone_id', 'phone_model_id', 'price', 'approval_status',
@@ -83,39 +83,35 @@ class PhonePricePredictor:
             raise CustomError("Failed to clean data.")
 
     def handle_invalid_data(self) -> Optional[pd.DataFrame]:
-        """حذف داده‌های نامعتبر"""
         if self.cleaned_data is None:
             raise CustomError("No cleaned data to process.")
 
         try:
-            # مثال: حذف داده‌های پرت بر اساس قیمت
-            Q1 = self.cleaned_data['post_price'].quantile(0.25)
-            Q3 = self.cleaned_data['post_price'].quantile(0.75)
-            IQR = Q3 - Q1
-            lower_bound = Q1 - 1.5 * IQR
-            upper_bound = Q3 + 1.5 * IQR
-            self.cleaned_data = self.cleaned_data[
-                (self.cleaned_data['post_price'] >= lower_bound) & (self.cleaned_data['post_price'] <= upper_bound)]
+            mean_prices = self.cleaned_data.groupby('phone_model_id')['price'].mean().reset_index()
+            mean_prices.columns = ['phone_model_id', 'mean_price']
+
+            self.cleaned_data = self.cleaned_data.merge(mean_prices, on='phone_model_id')
+            self.cleaned_data['lower_bound'] = (self.cleaned_data['mean_price'] * 0.9).round(0)
+            self.cleaned_data['upper_bound'] = (self.cleaned_data['mean_price'] * 1.2).round(0)
+
+            self.cleaned_data = self.cleaned_data[(self.cleaned_data['price'] >= self.cleaned_data['lower_bound']) & (
+                    self.cleaned_data['price'] <= self.cleaned_data['upper_bound'])]
+            self.cleaned_data = self.cleaned_data.drop(columns=['mean_price', 'lower_bound', 'upper_bound'])
+
+            mean_prices = self.cleaned_data.groupby('phone_model_id')['price'].mean().reset_index()
+            mean_prices.columns = ['phone_model_id', 'mean_price']
+
+            self.final_data = self.cleaned_data.merge(mean_prices, on='phone_model_id')
+
+            self.final_data['mean_price'] = self.final_data['mean_price'].round(0)
+            self.final_data['lower_bound'] = (self.final_data['mean_price'] * 0.9).round(0)
+            self.final_data['upper_bound'] = (self.final_data['mean_price'] * 1.1).round(0)
+
             logging.info("Invalid data handled successfully.")
-            return self.cleaned_data
+            return self.final_data
         except Exception as e:
             logging.error(f"Error handling invalid data: {e}")
             raise CustomError("Failed to handle invalid data.")
-
-    def modify_data(self) -> Optional[pd.DataFrame]:
-        """اعمال تغییرات بر روی داده‌ها"""
-        if self.cleaned_data is None:
-            raise CustomError("No cleaned data to modify.")
-
-        try:
-            # مثال: اعمال یک تعدیل ساده بر روی قیمت
-            self.final_data = self.cleaned_data.copy()
-            self.final_data['predicted_price'] = self.final_data['post_price'] * 0.9  # کاهش 10% قیمت
-            logging.info("Data modified successfully.")
-            return self.final_data
-        except Exception as e:
-            logging.error(f"Error modifying data: {e}")
-            raise CustomError("Failed to modify data.")
 
     def validate_results(self) -> Tuple[bool, float, float]:
         """اعتبارسنجی نتایج"""
@@ -157,7 +153,6 @@ class PhonePricePredictor:
             self.load_data()
             self.clean_data()
             self.handle_invalid_data()
-            self.modify_data()
             is_valid, mean_error, std_error = self.validate_results()
             self.save_results()
             end_time = datetime.now()
