@@ -12,7 +12,7 @@ if __name__ == "__main__":
     reference_path = DATA_PATH + 'models.csv'
     phone_models_path = DATA_PATH + 'phone_models.csv'
 
-    result_csv_path = "result.csv"
+    result_csv_path = "../output_files/result.csv"
     predictor = PhonePricePredictor(
         market_posts_path, phone_main_path, phone_models_path, reference_path, result_csv_path
     )

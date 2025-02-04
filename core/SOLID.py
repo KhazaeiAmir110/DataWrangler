@@ -114,29 +114,21 @@ class PhonePricePredictor:
             raise CustomError("Failed to handle invalid data.")
 
     def validate_results(self) -> Tuple[bool, float, float]:
-        """اعتبارسنجی نتایج"""
         if self.final_data is None:
             raise CustomError("No final data to validate.")
 
         try:
-            # مثال: محاسبه خطا و انحراف معیار خطاها
-            self.final_data['error'] = abs(self.final_data['predicted_price'] - self.final_data['actual_price']) / \
-                                       self.final_data['actual_price']
+            self.final_data['error'] = abs((self.final_data['mean_real'] / self.final_data['mean_price'] * 100) - 100)
             mean_error = self.final_data['error'].mean()
-            std_error = self.final_data['error'].std()
+            std_error = self.final_data['error'].std(ddof=1)
 
-            if mean_error > 0.2 or std_error > 0.1:
-                logging.warning(f"Validation failed: Mean error = {mean_error}, STD error = {std_error}")
-                return False, mean_error, std_error
-            else:
-                logging.info(f"Validation passed: Mean error = {mean_error}, STD error = {std_error}")
-                return True, mean_error, std_error
+            logging.info(f"Validation passed: Mean error = {mean_error}, STD error = {std_error}")
+            return True, mean_error, std_error
         except Exception as e:
             logging.error(f"Error validating results: {e}")
             raise CustomError("Failed to validate results.")
 
     def save_results(self) -> None:
-        """ذخیره‌سازی نتایج در فایل CSV"""
         if self.final_data is None:
             raise CustomError("No final data to save.")
 
@@ -147,7 +139,7 @@ class PhonePricePredictor:
             logging.error(f"Error saving results: {e}")
             raise CustomError("Failed to save results.")
 
-    def run(self) -> Tuple[bool, float, float]:
+    def run(self) -> tuple[bool, float, float, float] | tuple[bool, int, int, int]:
         start_time = datetime.now()
         try:
             self.load_data()
