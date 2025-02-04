@@ -1,18 +1,23 @@
 import logging
 
-from core.services.predictor import PhonePricePredictor
+from core.SOLID import PhonePricePredictor
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 if __name__ == "__main__":
-    market_posts_path = "../input_files/db_data/market_posts.csv"
-    phone_main_path = "../input_files/db_data/phone_main.csv"
-    phone_models_path = "../input_files/db_data/phone_models.csv"
-    phone_models2_path = "../input_files/db_data/phone_models2.csv"
+    DATA_PATH = '../input_files/db_data/'
 
-    result_csv_path = "../output_files/output_phone.csv"
+    market_posts_path = DATA_PATH + 'market_posts.csv'
+    phone_main_path = DATA_PATH + 'phone_main.csv'
+    reference_path = DATA_PATH + 'models.csv'
+    phone_models_path = DATA_PATH + 'phone_models.csv'
 
-    predictor = PhonePricePredictor(market_posts_path, result_csv_path)
-    process_time = predictor.run()
-
-    print(f"Process completed successfully in {process_time} seconds.")
+    result_csv_path = "result.csv"
+    predictor = PhonePricePredictor(
+        market_posts_path, phone_main_path, phone_models_path, reference_path, result_csv_path
+    )
+    is_valid, mean_error, std_error, process_time = predictor.run()
+    if is_valid:
+        print(f"Process completed successfully in {process_time} seconds.")
+    else:
+        print("Process failed.")
