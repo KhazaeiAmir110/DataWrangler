@@ -4,7 +4,7 @@ from typing import Tuple, Optional
 
 import pandas as pd
 
-from core.services.errors import CustomError
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 class PhonePricePredictor:
@@ -16,9 +16,8 @@ class PhonePricePredictor:
         self.final_data = None
 
     def load_data(self) -> Optional[pd.DataFrame]:
-        """خواندن داده‌ها از فایل CSV"""
         try:
-            self.data = pd.read_csv(self.source_csv_path)
+            # self.data = pd.read_csv(self.source_csv_path)
             logging.info("Data loaded successfully.")
             return self.data
         except Exception as e:
@@ -111,7 +110,6 @@ class PhonePricePredictor:
             raise CustomError("Failed to save results.")
 
     def run(self) -> Tuple[bool, float, float]:
-        """اجرای تمام مراحل"""
         start_time = datetime.now()
         try:
             self.load_data()
@@ -129,9 +127,13 @@ class PhonePricePredictor:
             return False, 0, 0, 0
 
 
+class CustomError(Exception):
+    pass
+
+
 if __name__ == "__main__":
-    source_csv_path = "../input_files/source.csv"
-    result_csv_path = "../output_files/result.csv"
+    source_csv_path = "source.csv"
+    result_csv_path = "result.csv"
     predictor = PhonePricePredictor(source_csv_path, result_csv_path)
     is_valid, mean_error, std_error, process_time = predictor.run()
     if is_valid:
