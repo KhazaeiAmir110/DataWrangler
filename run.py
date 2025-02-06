@@ -28,28 +28,23 @@ def handle_file_paths():
     input_path = os.path.abspath(args.input_path)
     output_path = os.path.abspath(args.output_path)
 
-    # Raise an error if the input path does not exist.
     if not os.path.exists(input_path):
         raise FileNotFoundError(f"Error: Input path '{input_path}' does not exist.")
 
-    # Raise an error if the input path is not a directory.
     if not os.path.isdir(input_path):
         raise NotADirectoryError(f"Error: Input path '{input_path}' is not a directory.")
 
     required_files = ["market_posts.csv", "phone_main.csv", "models.csv", "phone_models.csv"]
     missing_files = []
 
-    # Check for required files and record any missing ones.
     for file in required_files:
         file_path = os.path.join(input_path, file)
         if not os.path.exists(file_path):
             missing_files.append(file)
 
-    # Raise an error if one or more required files are missing.
     if missing_files:
         raise FileNotFoundError(f"Error: The following required files are missing: {', '.join(missing_files)}")
 
-    # Check if output path exists. If it does not, try to create it.
     if not os.path.exists(output_path):
         try:
             os.makedirs(output_path)
@@ -57,7 +52,6 @@ def handle_file_paths():
         except Exception as e:
             raise IOError(f"Error: Could not create output directory '{output_path}'. {e}")
 
-    # Check that the output path is indeed a directory.
     if not os.path.isdir(output_path):
         raise NotADirectoryError(f"Error: Output path '{output_path}' is not a directory.")
 
@@ -74,19 +68,24 @@ class PhonePricePredictor:
         self.result_csv = result_csv_path
         self.modified_data = None
 
-    def load_data(self) -> tuple[DataFrame | Any, DataFrame | Any, DataFrame | Any, DataFrame | Any]:
+    def load_data(self):
         try:
             self.market_posts = pd.read_csv(self.market_posts)
             self.phone_main = pd.read_csv(self.phone_main)
             self.phone_models = pd.read_csv(self.phone_models)
             self.reference = pd.read_csv(self.reference)
+
+            beginning_count = self.market_posts.groupby('phone_model_id').size().reset_index(
+                name='beginning_posts_count')
+            self.market_posts = self.market_posts.merge(beginning_count, how='inner', on='phone_model_id')
+
             logging.info("Data loaded successfully.")
             return self.market_posts, self.phone_main, self.phone_models, self.reference
         except Exception as e:
             logging.error(f"Error loading data: {e}")
             raise CustomError("Failed to load data.")
 
-    def clean_data(self) -> Optional[pd.DataFrame]:
+    def clean_data(self):
         if self.market_posts is None:
             raise CustomError("No data to clean.")
 
@@ -106,7 +105,9 @@ class PhonePricePredictor:
                     self.market_posts = self.market_posts[
                         ~self.market_posts['description'].str.contains(pattern, case=False, na=False)]
 
-            return self.market_posts
+            cleaned_count = self.market_posts.groupby('phone_model_id').size().reset_index(name='cleaned_posts_count')
+            self.market_posts = self.market_posts.merge(cleaned_count, how='inner', on='phone_model_id')
+
         except Exception as e:
             logging.error(f"Error cleaning data: {e}")
             raise CustomError("Failed to clean data.")
@@ -133,7 +134,6 @@ class PhonePricePredictor:
             self.reference['phone_id'] = self.reference['phone_id'].astype(float)
             self.reference['phone_model_id'] = self.reference['phone_model_id'].astype(float)
 
-            # Debuged by alireza and amirhossein
             self.market_posts = self.market_posts.merge(
                 self.reference, how='inner', on=['phone_id', 'phone_model_id']
             )
@@ -141,7 +141,8 @@ class PhonePricePredictor:
             self.market_posts = self.market_posts[
                 [
                     'nickname', 'ram_y', 'internal_memory_y', 'phone_id', 'phone_model_id', 'price', 'created_at',
-                    'description', 'reference_lower_bound', 'reference_upper_bound'
+                    'description', 'reference_lower_bound', 'reference_upper_bound', 'cleaned_posts_count',
+                    'beginning_posts_count'
                 ]
             ]
             self.modified_data = self.market_posts.rename(
@@ -162,7 +163,8 @@ class PhonePricePredictor:
                 last_date.month - self.modified_data['created_at'].dt.month)
         self.modified_data['weight'] = np.exp(-0.1 * self.modified_data['month_diff'])
 
-    def weighted_price(self, modified_data):
+    @staticmethod
+    def weighted_price(modified_data):
         try:
             modified_data['weighted_price'] = modified_data['price'] * modified_data['weight']
             weighted_mean = modified_data['weighted_price'].sum() / modified_data['weight'].sum()
@@ -171,7 +173,7 @@ class PhonePricePredictor:
             logging.error(f"Error Weighted Price: {e}")
             raise CustomError("Failed to load data.")
 
-    def handle_invalid_data(self) -> Optional[pd.DataFrame]:
+    def handle_invalid_data(self):
         if self.modified_data is None:
             raise CustomError("No cleaned data to process.")
 
@@ -194,6 +196,10 @@ class PhonePricePredictor:
                         self.modified_data['price'] <= self.modified_data['upper_bound'])]
             self.modified_data = self.modified_data.drop(
                 columns=['mean_price', 'std_price', 'lower_bound', 'upper_bound'])
+
+            preprocess_count = self.modified_data.groupby('phone_model_id').size().reset_index(
+                name='preprocess_posts_count')
+            self.modified_data = self.modified_data.merge(preprocess_count, on='phone_model_id')
 
             mean_prices = self.modified_data.groupby('phone_model_id').apply(self.weighted_price).reset_index()
             mean_prices.columns = ['phone_model_id', 'mean_price']
@@ -258,7 +264,8 @@ class PhonePricePredictor:
             self.modified_data.drop(columns=['price', 'description'])
             self.modified_data = self.modified_data[
                 ['nickname', 'phone_id', 'phone_model_id', 'ram', 'internal_memory', 'lower_bound', 'upper_bound',
-                 'lower_error', 'upper_error', 'error', 'mean_error', 'std']
+                 'lower_error', 'upper_error', 'error', 'mean_error', 'std', 'cleaned_posts_count',
+                 'beginning_posts_count', 'preprocess_posts_count']
             ].drop_duplicates()
 
             self.modified_data.to_csv(os.path.join(self.result_csv, 'output.csv'), index=False)
